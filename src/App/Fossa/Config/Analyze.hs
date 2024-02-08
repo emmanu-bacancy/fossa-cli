@@ -210,6 +210,7 @@ data AnalyzeCliOpts = AnalyzeCliOpts
   , analyzeIgnoreOrgWideCustomLicenseScanConfigs :: Flag IgnoreOrgWideCustomLicenseScanConfigs
   , analyzeCustomFossaDepsFile :: Maybe FilePath
   , analyzeStaticOnlyTactics :: Flag StaticOnlyTactics
+  , analyzeStackShare :: Bool  -- New field for --stackshare option
   }
   deriving (Eq, Ord, Show)
 
@@ -314,6 +315,8 @@ cliParser =
     <*> flagOpt IgnoreOrgWideCustomLicenseScanConfigs (applyFossaStyle <> long "ignore-org-wide-custom-license-scan-configs" <> stringToHelpDoc "Ignore custom-license scan configurations for your organization. These configurations are defined in the `Integrations` section of the Admin settings in the FOSSA web app")
     <*> optional (strOption (applyFossaStyle <> long "fossa-deps-file" <> helpDoc fossaDepsFileHelp <> metavar "FILEPATH"))
     <*> flagOpt StaticOnlyTactics (applyFossaStyle <> long "static-only-analysis" <> stringToHelpDoc "Only analyze the project using static strategies.")
+    <*> switch (applyFossaStyle <> long "stackshare" <> stringToHelpDoc "Identify non-opensource tools and connect with stackshare")
+
   where
     fossaDepsFileHelp :: Maybe (Doc AnsiStyle)
     fossaDepsFileHelp =
@@ -424,6 +427,15 @@ loadConfig AnalyzeCliOpts{analyzeBaseDir, commons = CommonOpts{optConfig}} = do
   configBaseDir <- resolveDir cwd (toText analyzeBaseDir)
   resolveConfigFile configBaseDir optConfig
 
+executeStackshare :: IO ()
+executeStackshare = do
+   -- Run a Ruby script as a separate process
+    (_, Just hout, _, _) <- createProcess (proc "ruby" ["-e", "puts 'Hello from Ruby!'"])
+                                    { std_out = CreatePipe }
+    -- Read the output of the Ruby script
+    output <- hGetContents hout
+    putStrLn output
+
 mergeOpts ::
   ( Has Diagnostics sig m
   , Has Exec sig m
@@ -450,6 +462,11 @@ mergeOpts cfg env cliOpts = do
         ]
 
   mergeStandardOpts cfg env cliOpts
+
+  let isStackShare = analyzeStackShare
+  if isStackShare
+    then executeStackshare
+    else mergeStandardOpts maybeConfig env cliOpts
 
 mergeStandardOpts ::
   ( Has Diagnostics sig m
